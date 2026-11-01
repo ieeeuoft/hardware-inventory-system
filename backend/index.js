@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const port = (() => {
+function getPort() {
     const args = process.argv;
 
     if (args.length !== 3) {
@@ -16,14 +16,18 @@ const port = (() => {
     }
 
     return num;
-})();
-const express = require("express");
-const app = express();
-app.use(express.json());
+}
 
-app.get("/", (req, res) => {
-    res.send("Hello World!");
-});
+const port = getPort();
+
+const { PrismaClient } = require('@prisma/client');
+const { createApp } = require('./src/app');
+const { InventoryService, PrismaInventoryRepository } = require('./src/inventory');
+
+const prisma = new PrismaClient();
+const repository = new PrismaInventoryRepository(prisma);
+const service = new InventoryService(repository);
+const app = createApp(service);
 
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
