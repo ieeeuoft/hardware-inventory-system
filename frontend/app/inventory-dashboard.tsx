@@ -18,7 +18,7 @@ type InventoryItem = {
   createdAt: string;
   updatedAt: string;
 };
-type Filter = "all" | "available" | "empty" | "negative";
+type Filter = "all" | "available" | "empty";
 type IconName =
   | "box"
   | "grid"
@@ -153,16 +153,11 @@ const errorMessage = (error: unknown) =>
     : "Something went wrong. Please try again.";
 
 function StockBadge({ quantity }: { quantity: number }) {
-  const status =
-    quantity > 0 ? "available" : quantity === 0 ? "empty" : "negative";
+  const status = quantity > 0 ? "available" : "empty";
   return (
     <span className={`stock-badge ${status}`}>
       <span />
-      {status === "available"
-        ? "In stock"
-        : status === "empty"
-          ? "Out of stock"
-          : "Negative stock"}
+      {status === "available" ? "In stock" : "Out of stock"}
     </span>
   );
 }
@@ -212,12 +207,10 @@ function ItemEditor({
     if (
       !quantity.trim() ||
       !Number.isInteger(count) ||
-      count < -2147483648 ||
+      count < 0 ||
       count > 2147483647
     ) {
-      setError(
-        "Quantity must be a whole number from -2,147,483,648 to 2,147,483,647.",
-      );
+      setError("Quantity must be a whole number from 0 to 2,147,483,647.");
       return;
     }
     setSaving(true);
@@ -303,7 +296,7 @@ function ItemEditor({
             type="number"
             required
             step="1"
-            min="-2147483648"
+            min="0"
             max="2147483647"
             value={quantity}
             onChange={(event) => setQuantity(event.target.value)}
@@ -387,7 +380,6 @@ export default function InventoryDashboard() {
     all: items?.length ?? 0,
     available: items?.filter((item) => item.quantity > 0).length ?? 0,
     empty: items?.filter((item) => item.quantity === 0).length ?? 0,
-    negative: items?.filter((item) => item.quantity < 0).length ?? 0,
   };
   const visibleItems = (items ?? [])
     .filter((item) => {
@@ -398,8 +390,7 @@ export default function InventoryDashboard() {
         matchesSearch &&
         (filter === "all" ||
           (filter === "available" && item.quantity > 0) ||
-          (filter === "empty" && item.quantity === 0) ||
-          (filter === "negative" && item.quantity < 0))
+          (filter === "empty" && item.quantity === 0))
       );
     })
     .sort((a, b) => {
@@ -417,7 +408,6 @@ export default function InventoryDashboard() {
     { value: "all", label: "All items" },
     { value: "available", label: "In stock" },
     { value: "empty", label: "Out of stock" },
-    { value: "negative", label: "Negative stock" },
   ];
 
   function saved(item: InventoryItem) {
@@ -525,7 +515,7 @@ export default function InventoryDashboard() {
                 </span>
               </div>
               <strong>
-                {items ? formatNumber(counts.empty + counts.negative) : "—"}
+                {items ? formatNumber(counts.empty) : "—"}
               </strong>
             </div>
           </div>
@@ -657,9 +647,7 @@ export default function InventoryDashboard() {
                           </div>
                         </td>
                         <td>
-                          <span
-                            className={`quantity ${item.quantity < 0 ? "negative-quantity" : ""}`}
-                          >
+                          <span className="quantity">
                             {formatNumber(item.quantity)}
                           </span>
                           <span className="unit-label">units</span>

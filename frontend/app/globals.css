@@ -466,9 +466,6 @@ tbody tr:hover {
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
-.negative-quantity {
-  color: #b15d3b;
-}
 .unit-label {
   font-size: 10px;
   margin-left: 6px;
@@ -496,10 +493,6 @@ tbody tr:hover {
 .empty {
   color: #758197;
   background: #f0f3f7;
-}
-.negative {
-  color: #ad6436;
-  background: #fff5e9;
 }
 .updated-cell {
   font-size: 12px;

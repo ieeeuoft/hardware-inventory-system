@@ -87,13 +87,22 @@ test('PostgreSQL API persists counts, accepts zero, and rejects stale concurrent
 
         const negativeResponse = await send(quantityUrl, 'PATCH', { quantity: -3, version: 2 });
 
-        assert.equal(negativeResponse.status, 200);
+        assert.equal(negativeResponse.status, 400);
 
-        const negativeQuantityItem = await prisma.inventoryItem.findUnique({
+        const unchangedItem = await prisma.inventoryItem.findUnique({
             where: { id: itemId },
         });
 
-        assert.equal(negativeQuantityItem.quantity, -3);
+        assert.equal(unchangedItem.quantity, 0);
+        assert.equal(unchangedItem.version, 2);
+
+        // The database constraint also rejects negatives that bypass the API.
+        await assert.rejects(
+            prisma.inventoryItem.update({
+                where: { id: itemId },
+                data: { quantity: -1 },
+            })
+        );
 
         const missingItemUrl = `${baseUrl}/missing/quantity`;
         const missingItemResponse = await send(missingItemUrl, 'PATCH', {
