@@ -1,0 +1,5 @@
+# dependencies
+node_modules/
+
+# env files (Prisma reads DATABASE_URL from .env)
+.env*
