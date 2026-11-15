@@ -4,6 +4,9 @@ const assert = require('node:assert/strict');
 const { PrismaClient } = require('@prisma/client');
 const { InventoryService, PrismaInventoryRepository } = require('../src/inventory');
 const { createApp } = require('../src/app');
+const { loadEnv } = require('../src/env');
+
+loadEnv();
 
 const databaseTestOptions = {
     skip: process.env.RUN_DATABASE_TESTS !== '1',

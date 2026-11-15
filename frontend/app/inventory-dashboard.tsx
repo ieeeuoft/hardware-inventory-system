@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -347,34 +348,42 @@ export default function InventoryDashboard() {
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
 
-  const loadItems = useCallback(async () => {
+  // Starts a fetch, cancelling any one still in flight. State is only set
+  // in the promise callbacks (after the request settles), so this is safe
+  // to call from an effect.
+  const fetchItems = useCallback(() => {
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await request<InventoryItem[]>("", {
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(15000),
-        ]),
-      });
-      if (!controller.signal.aborted) {
+    return request<InventoryItem[]>("", {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+    }).then(
+      (data) => {
+        if (controller.signal.aborted) return;
         setItems(data);
         setLastLoaded(new Date());
-      }
-    } catch (error) {
-      if (!controller.signal.aborted) setError(errorMessage(error));
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
+        setLoading(false);
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(errorMessage(error));
+        setLoading(false);
+      },
+    );
   }, []);
 
+  // Manual refresh: show the loading state, then fetch.
+  const loadItems = useCallback(() => {
+    setLoading(true);
+    setError("");
+    return fetchItems();
+  }, [fetchItems]);
+
+  // Initial load: `loading` already starts as true, so no state to reset.
   useEffect(() => {
-    void loadItems();
+    void fetchItems();
     return () => activeRequest.current?.abort();
-  }, [loadItems]);
+  }, [fetchItems]);
 
   const counts = {
     all: items?.length ?? 0,
@@ -437,7 +446,7 @@ export default function InventoryDashboard() {
         Skip to inventory
       </a>
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="IEEE UofT inventory home">
+        <Link className="brand" href="/" aria-label="IEEE UofT inventory home">
           <Image
             className="brand-logo"
             src="/ieee-logo.svg"
@@ -447,14 +456,14 @@ export default function InventoryDashboard() {
             loading="eager"
           />
           <span className="brand-wordmark">IEEE UofT</span>
-        </a>
+        </Link>
         <div className="workspace-label">WORKSPACE</div>
         <nav aria-label="Main navigation">
-          <a className="nav-item active" href="/" aria-current="page">
+          <Link className="nav-item active" href="/" aria-current="page">
             <Icon name="grid" />
             Inventory
             <span className="nav-indicator" />
-          </a>
+          </Link>
         </nav>
       </aside>
 
