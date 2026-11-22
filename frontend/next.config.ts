@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
     ).replace(/\/$/, "");
     return [
       {
+        source: "/api/categories",
+        destination: `${backendUrl}/api/categories`,
+      },
+      {
         source: "/api/items/:path*",
         destination: `${backendUrl}/api/items/:path*`,
       },

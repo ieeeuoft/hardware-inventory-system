@@ -37,7 +37,7 @@ The backend will be available at [http://localhost:3001](http://localhost:3001).
 Open a second terminal, go to the frontend directory, and install the dependencies:
 
 ```bash
-cd hardware-inventory-system/frontend
+cd frontend
 pnpm install
 ```
 

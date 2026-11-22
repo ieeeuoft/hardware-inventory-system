@@ -13,6 +13,12 @@ function createApp(service) {
         response.send('Hello World!');
     });
 
+    //getting all categories
+    app.get('/api/categories', async (request, response) => {
+        const categories = await service.listCategories();
+        response.json(categories);
+    });
+
     app.get('/api/items', async (request, response) => {
         const items = await service.list();
 
@@ -41,6 +47,11 @@ function createApp(service) {
 
         const updatedItem = await service.setQuantity(itemId, itemData);
 
+        response.json(updatedItem);
+    });
+
+    app.patch('/api/items/:id', async (request, response) => {
+        const updatedItem = await service.edit(request.params.id, request.body ?? {});
         response.json(updatedItem);
     });
 
