@@ -528,6 +528,33 @@ tbody tr:hover {
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.item-details {
+  min-width: 0;
+}
+.item-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.item-category {
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid #c4dfef;
+  border-radius: 5px;
+  background: #edf6fd;
+  color: var(--blue);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.item-category.uncategorized {
+  border-color: var(--border);
+  background: #f8fafc;
+  color: var(--muted);
+}
 .item-symbol {
   width: 35px;
   height: 35px;

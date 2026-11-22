@@ -801,7 +801,16 @@ export default function InventoryDashboard() {
                             <span className="item-symbol">
                               <Icon name="box" />
                             </span>
-                            <strong>{item.name}</strong>
+                            <div className="item-details">
+                              <strong>{item.name}</strong>
+                              <ul className="item-categories" aria-label="Categories">
+                                {item.categories.length > 0 ? item.categories.map((category) => (
+                                  <li className="item-category" key={category.id}>{category.name}</li>
+                                )) : (
+                                  <li className="item-category uncategorized">Uncategorized</li>
+                                )}
+                              </ul>
+                            </div>
                           </div>
                         </td>
                         <td>
