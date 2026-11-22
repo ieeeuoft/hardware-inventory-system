@@ -50,6 +50,11 @@ function createApp(service) {
         response.json(updatedItem);
     });
 
+    app.patch('/api/items/:id', async (request, response) => {
+        const updatedItem = await service.edit(request.params.id, request.body ?? {});
+        response.json(updatedItem);
+    });
+
     // Express identifies error handlers by these four parameters.
     app.use((error, request, response, next) => {
         if (error instanceof InventoryError) {

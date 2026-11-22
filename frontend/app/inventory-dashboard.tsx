@@ -34,7 +34,7 @@ type IconName =
   | "check"
   | "alert"
   | "layers";
-type Editor = { kind: "create" } | { kind: "quantity"; item: InventoryItem };
+type Editor = { kind: "create" } | { kind: "quantity" | "edit"; item: InventoryItem };
 
 function Icon({
   name,
@@ -214,16 +214,18 @@ function ItemEditor({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState(
-    editor.kind === "quantity" ? editor.item.name : "",
+    editor.kind !== "create" ? editor.item.name : "",
   );
   const [quantity, setQuantity] = useState(
-    editor.kind === "quantity" ? String(editor.item.quantity) : "0",
+    editor.kind !== "create" ? String(editor.item.quantity) : "0",
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const updating = editor.kind === "quantity";
-  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>(
+    editor.kind === "edit" ? editor.item.categories.map((category) => category.id) : [],
+  );
   const { categories, categoriesLoading, categoriesError, setCategoryAttempt } = useCategories(!updating);
 
   function toggleCategory(id: string) {
@@ -247,18 +249,18 @@ function ItemEditor({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || conflict) return;
+    if (saving || conflict || (editor.kind === "edit" && (categoriesLoading || categoriesError))) return;
     const count = Number(quantity);
     if (!name.trim()) {
       setError("Enter an item name.");
       return;
     }
-    if (
+    if (editor.kind !== "edit" && (
       !quantity.trim() ||
       !Number.isInteger(count) ||
       count < -2147483648 ||
       count > 2147483647
-    ) {
+    )) {
       setError(
         "Quantity must be a whole number from -2,147,483,648 to 2,147,483,647.",
       );
@@ -268,13 +270,15 @@ function ItemEditor({
     setError("");
     try {
       const item = await request<InventoryItem>(
-        updating ? `/${encodeURIComponent(editor.item.id)}/quantity` : "",
+        editor.kind === "create" ? "" : `/${encodeURIComponent(editor.item.id)}${updating ? "/quantity" : ""}`,
         {
-          method: updating ? "PATCH" : "POST",
+          method: editor.kind === "create" ? "POST" : "PATCH",
           body: JSON.stringify(
-            updating
+            editor.kind === "quantity"
               ? { quantity: count, version: editor.item.version }
-              : { name: name.trim(), quantity: count, categoryIds },
+              : editor.kind === "edit"
+                ? { name: name.trim(), categoryIds, version: editor.item.version }
+                : { name: name.trim(), quantity: count, categoryIds },
           ),
         },
       );
@@ -315,7 +319,7 @@ function ItemEditor({
           </button>
         </div>
         <h2 id="editor-title">
-          {updating ? "Update quantity" : "Add an inventory item"}
+          {updating ? "Update quantity" : editor.kind === "edit" ? "Edit item" : "Add an inventory item"}
         </h2>
         {updating ? (
           <div className="editing-item">
@@ -336,11 +340,11 @@ function ItemEditor({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="e.g. Arduino Uno R3"
-              disabled={saving}
+              disabled={saving || conflict}
             />
           </label>
         )}
-        <label className="field">
+        {editor.kind !== "edit" && (<label className="field">
           {updating ? "New quantity" : "Initial quantity"}
           <input
             autoFocus={updating}
@@ -353,37 +357,37 @@ function ItemEditor({
             onChange={(event) => setQuantity(event.target.value)}
             disabled={saving || conflict}
           />
-        </label>
+        </label>)}
         {!updating && (
-          <fieldset className="category-field" disabled={saving}>
+          <fieldset className="category-field" disabled={saving || conflict}>
             <legend>Categories</legend>
             <p className="category-help">Select any that apply, or leave blank for no category.</p>
 
             <div className="category-options" aria-busy={categoriesLoading}>
-            {categoriesLoading && (
-              <p className="category-empty" role="status">Loading categories…</p>
-            )}
-            {categoriesError && (
-              <div className="category-empty" role="alert">
-                <p>Could not load categories. {categoriesError}</p>
-                <button type="button" className="button secondary" onClick={() => setCategoryAttempt((attempt) => attempt + 1)}>
-                  Try again
-                </button>
-              </div>
-            )}
-            {categories.map((category) => (
-              <label className="category-option" key={category.id}>
-                <input
-                  type="checkbox"
-                  checked={categoryIds.includes(category.id)}
-                  onChange={() => toggleCategory(category.id)}
-                />
-                <span>{category.name}</span>
-              </label>
-            ))}
-            {!categoriesLoading && !categoriesError && categories.length === 0 && (
-              <p className="category-empty">No categories available.</p>
-            )}
+              {categoriesLoading && (
+                <p className="category-empty" role="status">Loading categories…</p>
+              )}
+              {categoriesError && (
+                <div className="category-empty" role="alert">
+                  <p>Could not load categories. {categoriesError}</p>
+                  <button type="button" className="button secondary" onClick={() => setCategoryAttempt((attempt) => attempt + 1)}>
+                    Try again
+                  </button>
+                </div>
+              )}
+              {categories.map((category) => (
+                <label className="category-option" key={category.id}>
+                  <input
+                    type="checkbox"
+                    checked={categoryIds.includes(category.id)}
+                    onChange={() => toggleCategory(category.id)}
+                  />
+                  <span>{category.name}</span>
+                </label>
+              ))}
+              {!categoriesLoading && !categoriesError && categories.length === 0 && (
+                <p className="category-empty">No categories available.</p>
+              )}
             </div>
           </fieldset>
         )}
@@ -408,9 +412,13 @@ function ItemEditor({
               Reload inventory
             </button>
           ) : (
-            <button className="button primary" type="submit" disabled={saving}>
-              {saving ? "Saving…" : updating ? "Save quantity" : "Add item"}
-              {!saving && <Icon name={updating ? "check" : "plus"} />}
+            <button
+              className="button primary"
+              type="submit"
+              disabled={saving || (editor.kind === "edit" && (categoriesLoading || Boolean(categoriesError)))}
+            >
+              {saving ? "Saving…" : updating ? "Save quantity" : editor.kind === "edit" ? "Save changes" : "Add item"}
+              {!saving && <Icon name={editor.kind !== "create" ? "check" : "plus"} />}
             </button>
           )}
         </div>
@@ -443,7 +451,7 @@ function CategoryDrawer({ children, onClose }: { children: ReactNode; onClose: (
         if (event.target !== event.currentTarget) return;
         const bounds = event.currentTarget.getBoundingClientRect();
         if (event.clientX < bounds.left || event.clientX > bounds.right ||
-            event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+          event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
       }}
     >
       <div className="category-drawer-heading">
@@ -557,7 +565,9 @@ export default function InventoryDashboard() {
     setNotice(
       created
         ? `${item.name} added to inventory.`
-        : `Quantity updated for ${item.name}.`,
+        : editor?.kind === "edit"
+          ? `${item.name} updated.`
+          : `Quantity updated for ${item.name}.`,
     );
     if (created) {
       setSearch("");
@@ -743,28 +753,28 @@ export default function InventoryDashboard() {
                   />
                 </label>
                 <div className="filter-sort">
-                <button
-                  type="button"
-                  className="category-filter"
-                  aria-haspopup="dialog"
-                  aria-expanded={categoryDrawerOpen}
-                  onClick={() => setCategoryDrawerOpen(true)}
-                >
-                  Category: {selectedCategories.length || showUncategorized ? `${selectedCategories.length + Number(showUncategorized)} selected` : "All categories"}
-                </button>
-                <label className="sort-field">
-                  <span>Sort by:</span>
-                  <select
-                    aria-label="Sort items"
-                    value={sort}
-                    onChange={(event) => setSort(event.target.value)}
+                  <button
+                    type="button"
+                    className="category-filter"
+                    aria-haspopup="dialog"
+                    aria-expanded={categoryDrawerOpen}
+                    onClick={() => setCategoryDrawerOpen(true)}
                   >
-                    <option value="name">Name A–Z</option>
-                    <option value="quantity-asc">Quantity: low to high</option>
-                    <option value="quantity-desc">Quantity: high to low</option>
-                    <option value="updated">Recently updated</option>
-                  </select>
-                </label>
+                    Category: {selectedCategories.length || showUncategorized ? `${selectedCategories.length + Number(showUncategorized)} selected` : "All categories"}
+                  </button>
+                  <label className="sort-field">
+                    <span>Sort by:</span>
+                    <select
+                      aria-label="Sort items"
+                      value={sort}
+                      onChange={(event) => setSort(event.target.value)}
+                    >
+                      <option value="name">Name A–Z</option>
+                      <option value="quantity-asc">Quantity: low to high</option>
+                      <option value="quantity-desc">Quantity: high to low</option>
+                      <option value="updated">Recently updated</option>
+                    </select>
+                  </label>
                 </div>
               </div>
             </div>
@@ -823,17 +833,28 @@ export default function InventoryDashboard() {
                           </time>
                         </td>
                         <td className="action-cell">
-                          <button
-                            className="row-action"
-                            disabled={loading || !!error}
-                            aria-label={`Update quantity for ${item.name}`}
-                            onClick={() =>
-                              setEditor({ kind: "quantity", item })
-                            }
-                          >
-                            Update quantity
-                            <Icon name="arrow" />
-                          </button>
+                          <div className="item-actions">
+                            <button
+                              className="row-action"
+                              disabled={loading || !!error}
+                              aria-label={`Update quantity for ${item.name}`}
+                              onClick={() =>
+                                setEditor({ kind: "quantity", item })
+                              }
+                            >
+                              Update quantity
+                              <Icon name="arrow" />
+                            </button>
+                            <button
+                              className="row-action"
+                              disabled={loading || !!error}
+                              aria-label={`Edit item ${item.name}`}
+                              onClick={() => setEditor({ kind: "edit", item })}
+                            >
+                              Edit item
+                              <Icon name="arrow" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -893,7 +914,7 @@ export default function InventoryDashboard() {
             <div className="panel-footer">
               <span aria-live="polite">
                 {items
-                  ? `Showing ${formatNumber(visibleItems.length)} of ${formatNumber(items.length)} items`
+                  ? `Showing ${formatNumber(visibleItems.length)} of ${formatNumber(visibleItems.length)} items`
                   : "Inventory items"}
               </span>
               <span className="sync-status">
@@ -915,26 +936,26 @@ export default function InventoryDashboard() {
       </div>
       {categoryDrawerOpen && (
         <CategoryDrawer onClose={() => setCategoryDrawerOpen(false)}>
-                    <button type="button" className="button secondary" onClick={() => {
-                      setSelectedCategories([]);
-                      setShowUncategorized(false);
-                    }}>Clear selection</button>
-                    <p className="category-help">Match any selected category.</p>
-                    <label className="category-option">
-                      <input type="checkbox" checked={showUncategorized} onChange={(event) => setShowUncategorized(event.target.checked)} />
-                      <span>Uncategorized</span>
-                    </label>
-                    {categoriesLoading && <p className="category-empty" role="status">Loading categories…</p>}
-                    {categoriesError && <div role="alert" className="category-empty">
-                      <p>{categoriesError}</p>
-                      <button type="button" className="button secondary" onClick={() => setCategoryAttempt((attempt) => attempt + 1)}>Try again</button>
-                    </div>}
-                    {categories.map((category) => (
-                      <label className="category-option" key={category.id}>
-                        <input type="checkbox" checked={selectedCategories.includes(category.id)} onChange={() => setSelectedCategories((selected) => selected.includes(category.id) ? selected.filter((id) => id !== category.id) : [...selected, category.id])} />
-                        <span>{category.name}</span>
-                      </label>
-                    ))}
+          <button type="button" className="button secondary" onClick={() => {
+            setSelectedCategories([]);
+            setShowUncategorized(false);
+          }}>Clear selection</button>
+          <p className="category-help">Match any selected category.</p>
+          <label className="category-option">
+            <input type="checkbox" checked={showUncategorized} onChange={(event) => setShowUncategorized(event.target.checked)} />
+            <span>Uncategorized</span>
+          </label>
+          {categoriesLoading && <p className="category-empty" role="status">Loading categories…</p>}
+          {categoriesError && <div role="alert" className="category-empty">
+            <p>{categoriesError}</p>
+            <button type="button" className="button secondary" onClick={() => setCategoryAttempt((attempt) => attempt + 1)}>Try again</button>
+          </div>}
+          {categories.map((category) => (
+            <label className="category-option" key={category.id}>
+              <input type="checkbox" checked={selectedCategories.includes(category.id)} onChange={() => setSelectedCategories((selected) => selected.includes(category.id) ? selected.filter((id) => id !== category.id) : [...selected, category.id])} />
+              <span>{category.name}</span>
+            </label>
+          ))}
         </CategoryDrawer>
       )}
       {editor && (

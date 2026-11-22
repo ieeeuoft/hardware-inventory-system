@@ -81,6 +81,37 @@ class PrismaInventoryRepository {
         }
     }
 
+    async edit(id, name, categoryIds, version) {
+        try {
+            return await this.prisma.$transaction(async (transaction) => {
+                const result = await transaction.inventoryItem.updateMany({
+                    where: { id, version },
+                    data: { name, version: { increment: 1 } },
+                });
+                if (result.count === 0) {
+                    const existing = await transaction.inventoryItem.findUnique({ where: { id } });
+                    if (!existing) throw new InventoryError('Item not found.', 404);
+                    throw new InventoryError(
+                        'This item changed since you opened it. Refresh the inventory and try again.', 409
+                    );
+                }
+                return transaction.inventoryItem.update({
+                    where: { id },
+                    data: { categories: {
+                        set: [],
+                        connect: categoryIds.map((categoryId) => ({ id: categoryId })),
+                    } },
+                    include: { categories: { select: { id: true, name: true } } },
+                });
+            });
+        } catch (error) {
+            if (error.code === 'P2025') {
+                throw new InventoryError('A selected category no longer exists. Reopen the form and try again.');
+            }
+            throw error;
+        }
+    }
+
     async setQuantity(id, quantity, version) {
         return this.prisma.$transaction(async (transaction) => {
             const updateResult = await transaction.inventoryItem.updateMany({
@@ -141,6 +172,18 @@ class InventoryService {
             throw new InventoryError('Category IDs must be an array of non-empty strings.');
         }
         return this.repository.create(item, [...new Set(categoryIds)]);
+    }
+
+    edit(id, itemData = {}) {
+        const { name } = new InventoryItem(itemData.name, 0);
+        const { categoryIds, version } = itemData;
+        if (!Array.isArray(categoryIds) || categoryIds.some((id) => typeof id !== 'string' || !id.trim())) {
+            throw new InventoryError('Category IDs must be an array of non-empty strings.');
+        }
+        if (!Number.isInteger(version) || version < 0 || version >= 2147483647) {
+            throw new InventoryError('A valid item version is required. Refresh the inventory.');
+        }
+        return this.repository.edit(id, name, [...new Set(categoryIds)], version);
     }
 
     setQuantity(id, itemData = {}) {

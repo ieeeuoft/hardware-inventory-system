@@ -603,6 +603,12 @@ tbody tr:hover {
   white-space: nowrap;
   padding: 8px 0 8px 8px;
 }
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+}
 .row-action:hover:not(:disabled) {
   color: #00588f;
   text-decoration: underline;
