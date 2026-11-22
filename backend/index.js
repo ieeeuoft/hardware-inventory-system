@@ -20,6 +20,8 @@ function getPort() {
 
 const port = getPort();
 
+require('./src/env').loadEnv();
+
 const { PrismaClient } = require('@prisma/client');
 const { createApp } = require('./src/app');
 const { InventoryService, PrismaInventoryRepository } = require('./src/inventory');

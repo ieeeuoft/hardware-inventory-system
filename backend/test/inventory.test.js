@@ -4,7 +4,7 @@ const { InventoryItem, InventoryService } = require('../src/inventory');
 const { createApp } = require('../src/app');
 
 test('domain rejects invalid quantities and names', () => {
-    const invalidQuantities = [-2147483649, 1.2, '4', null, NaN, Infinity, 2147483648];
+    const invalidQuantities = [-1, -2147483649, 1.2, '4', null, NaN, Infinity, 2147483648];
 
     for (const quantity of invalidQuantities) {
         assert.throws(() => {
@@ -103,19 +103,19 @@ test('service creates an item and sets an absolute quantity through its reposito
         },
     };
     const service = new InventoryService(repository);
-    const item = await service.create({ name: ' PLA spool ', quantity: -4 });
+    const item = await service.create({ name: ' PLA spool ', quantity: 4 });
 
     assert.equal(item.name, 'PLA spool');
-    assert.equal(item.quantity, -4);
+    assert.equal(item.quantity, 4);
 
     const updatedItem = await service.setQuantity(item.id, {
-        quantity: -2,
+        quantity: 2,
         version: item.version,
     });
 
-    assert.equal(updatedItem.quantity, -2);
+    assert.equal(updatedItem.quantity, 2);
     assert.equal(updatedItem.version, 1);
-    assert.deepEqual(calls[1], ['set', 'item-1', -2, 0]);
+    assert.deepEqual(calls[1], ['set', 'item-1', 2, 0]);
 });
 
 test('item names have no application length limit', () => {

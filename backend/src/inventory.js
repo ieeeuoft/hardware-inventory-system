@@ -10,11 +10,11 @@ class InventoryError extends Error {
 class InventoryItem {
     static validateQuantity(quantity) {
         const isInteger = Number.isInteger(quantity);
-        const isWithinDatabaseRange = quantity >= -2147483648 && quantity <= 2147483647;
+        const isWithinDatabaseRange = quantity >= 0 && quantity <= 2147483647;
 
         if (!isInteger || !isWithinDatabaseRange) {
             throw new InventoryError(
-                'Quantity must be a whole number from -2,147,483,648 to 2,147,483,647.'
+                'Quantity must be a whole number from 0 to 2,147,483,647.'
             );
         }
 

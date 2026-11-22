@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -18,7 +19,7 @@ type InventoryItem = {
   createdAt: string;
   updatedAt: string;
 };
-type Filter = "all" | "available" | "empty" | "negative";
+type Filter = "all" | "available" | "empty";
 type IconName =
   | "box"
   | "grid"
@@ -153,16 +154,11 @@ const errorMessage = (error: unknown) =>
     : "Something went wrong. Please try again.";
 
 function StockBadge({ quantity }: { quantity: number }) {
-  const status =
-    quantity > 0 ? "available" : quantity === 0 ? "empty" : "negative";
+  const status = quantity > 0 ? "available" : "empty";
   return (
     <span className={`stock-badge ${status}`}>
       <span />
-      {status === "available"
-        ? "In stock"
-        : status === "empty"
-          ? "Out of stock"
-          : "Negative stock"}
+      {status === "available" ? "In stock" : "Out of stock"}
     </span>
   );
 }
@@ -212,12 +208,10 @@ function ItemEditor({
     if (
       !quantity.trim() ||
       !Number.isInteger(count) ||
-      count < -2147483648 ||
+      count < 0 ||
       count > 2147483647
     ) {
-      setError(
-        "Quantity must be a whole number from -2,147,483,648 to 2,147,483,647.",
-      );
+      setError("Quantity must be a whole number from 0 to 2,147,483,647.");
       return;
     }
     setSaving(true);
@@ -303,7 +297,7 @@ function ItemEditor({
             type="number"
             required
             step="1"
-            min="-2147483648"
+            min="0"
             max="2147483647"
             value={quantity}
             onChange={(event) => setQuantity(event.target.value)}
@@ -354,40 +348,47 @@ export default function InventoryDashboard() {
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
 
-  const loadItems = useCallback(async () => {
+  // Starts a fetch, cancelling any one still in flight. State is only set
+  // in the promise callbacks (after the request settles), so this is safe
+  // to call from an effect.
+  const fetchItems = useCallback(() => {
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await request<InventoryItem[]>("", {
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(15000),
-        ]),
-      });
-      if (!controller.signal.aborted) {
+    return request<InventoryItem[]>("", {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+    }).then(
+      (data) => {
+        if (controller.signal.aborted) return;
         setItems(data);
         setLastLoaded(new Date());
-      }
-    } catch (error) {
-      if (!controller.signal.aborted) setError(errorMessage(error));
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
+        setLoading(false);
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(errorMessage(error));
+        setLoading(false);
+      },
+    );
   }, []);
 
+  // Manual refresh: show the loading state, then fetch.
+  const loadItems = useCallback(() => {
+    setLoading(true);
+    setError("");
+    return fetchItems();
+  }, [fetchItems]);
+
+  // Initial load: `loading` already starts as true, so no state to reset.
   useEffect(() => {
-    void loadItems();
+    void fetchItems();
     return () => activeRequest.current?.abort();
-  }, [loadItems]);
+  }, [fetchItems]);
 
   const counts = {
     all: items?.length ?? 0,
     available: items?.filter((item) => item.quantity > 0).length ?? 0,
     empty: items?.filter((item) => item.quantity === 0).length ?? 0,
-    negative: items?.filter((item) => item.quantity < 0).length ?? 0,
   };
   const visibleItems = (items ?? [])
     .filter((item) => {
@@ -398,8 +399,7 @@ export default function InventoryDashboard() {
         matchesSearch &&
         (filter === "all" ||
           (filter === "available" && item.quantity > 0) ||
-          (filter === "empty" && item.quantity === 0) ||
-          (filter === "negative" && item.quantity < 0))
+          (filter === "empty" && item.quantity === 0))
       );
     })
     .sort((a, b) => {
@@ -417,7 +417,6 @@ export default function InventoryDashboard() {
     { value: "all", label: "All items" },
     { value: "available", label: "In stock" },
     { value: "empty", label: "Out of stock" },
-    { value: "negative", label: "Negative stock" },
   ];
 
   function saved(item: InventoryItem) {
@@ -447,7 +446,7 @@ export default function InventoryDashboard() {
         Skip to inventory
       </a>
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="IEEE UofT inventory home">
+        <Link className="brand" href="/" aria-label="IEEE UofT inventory home">
           <Image
             className="brand-logo"
             src="/ieee-logo.svg"
@@ -457,14 +456,14 @@ export default function InventoryDashboard() {
             loading="eager"
           />
           <span className="brand-wordmark">IEEE UofT</span>
-        </a>
+        </Link>
         <div className="workspace-label">WORKSPACE</div>
         <nav aria-label="Main navigation">
-          <a className="nav-item active" href="/" aria-current="page">
+          <Link className="nav-item active" href="/" aria-current="page">
             <Icon name="grid" />
             Inventory
             <span className="nav-indicator" />
-          </a>
+          </Link>
         </nav>
       </aside>
 
@@ -525,7 +524,7 @@ export default function InventoryDashboard() {
                 </span>
               </div>
               <strong>
-                {items ? formatNumber(counts.empty + counts.negative) : "—"}
+                {items ? formatNumber(counts.empty) : "—"}
               </strong>
             </div>
           </div>
@@ -657,9 +656,7 @@ export default function InventoryDashboard() {
                           </div>
                         </td>
                         <td>
-                          <span
-                            className={`quantity ${item.quantity < 0 ? "negative-quantity" : ""}`}
-                          >
+                          <span className="quantity">
                             {formatNumber(item.quantity)}
                           </span>
                           <span className="unit-label">units</span>
