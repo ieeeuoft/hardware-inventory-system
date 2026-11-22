@@ -44,8 +44,16 @@ class PrismaInventoryRepository {
         this.prisma = prisma;
     }
 
+    listCategories() {
+        return this.prisma.category.findMany({
+            select: { id: true, name: true },
+            orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        });
+    }
+
     list() {
         return this.prisma.inventoryItem.findMany({
+            include: { categories: { select: { id: true, name: true } } }, 
             orderBy: [
                 { name: 'asc' },
                 { id: 'asc' },
@@ -53,13 +61,24 @@ class PrismaInventoryRepository {
         });
     }
 
-    create(item) {
-        return this.prisma.inventoryItem.create({
-            data: {
-                name: item.name,
-                quantity: item.quantity,
-            },
-        });
+    async create(item, categoryIds = []) {
+        try {
+            return await this.prisma.inventoryItem.create({
+                data: {
+                    name: item.name,
+                    quantity: item.quantity,
+                    //look up each category id and connect them in the cat/inv item join table
+                    categories: { connect: categoryIds.map((categoryId) => ({ id: categoryId })) },
+                    // connect: [{ id: 'cat_1' }, { id: 'cat_2' }]
+                },
+                include: { categories: { select: { id: true, name: true } } },
+            });
+        } catch (error) {
+            if (error.code === 'P2025') { // if prisma cant find the category record AKA row
+                throw new InventoryError('A selected category no longer exists. Reopen the form and try again.');
+            }
+            throw error;
+        }
     }
 
     async setQuantity(id, quantity, version) {
@@ -94,6 +113,7 @@ class PrismaInventoryRepository {
 
             const updatedItem = await transaction.inventoryItem.findUnique({
                 where: { id: id },
+                include: { categories: { select: { id: true, name: true } } }, 
             });
 
             return updatedItem;
@@ -106,14 +126,21 @@ class InventoryService {
         this.repository = repository;
     }
 
+    listCategories() {
+        return this.repository.listCategories();
+    }
+
     list() {
         return this.repository.list();
     }
 
     create(itemData = {}) {
         const item = new InventoryItem(itemData.name, itemData.quantity);
-
-        return this.repository.create(item);
+        const categoryIds = itemData.categoryIds ?? [];
+        if (!Array.isArray(categoryIds) || categoryIds.some((id) => typeof id !== 'string' || !id.trim())) {
+            throw new InventoryError('Category IDs must be an array of non-empty strings.');
+        }
+        return this.repository.create(item, [...new Set(categoryIds)]);
     }
 
     setQuantity(id, itemData = {}) {

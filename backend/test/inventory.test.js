@@ -1,7 +1,23 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { InventoryItem, InventoryService } = require('../src/inventory');
+const { InventoryItem, InventoryService, PrismaInventoryRepository } = require('../src/inventory');
 const { createApp } = require('../src/app');
+
+test('GET /api/categories returns categories through the service', async () => {
+    const categories = [{ id: 'category-1', name: 'Sensors' }];
+    const service = new InventoryService({
+        async listCategories() { return categories; },
+    });
+    const server = createApp(service).listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    try {
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/categories`);
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), categories);
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+    }
+});
 
 test('domain rejects invalid quantities and names', () => {
     const invalidQuantities = [-2147483649, 1.2, '4', null, NaN, Infinity, 2147483648];
@@ -125,4 +141,33 @@ test('item names have no application length limit', () => {
 
     assert.equal(longNameItem.name, longName);
     assert.equal(singleCharacterItem.name, 'x');
+});
+
+test('category selections are validated, deduplicated, and optional', async () => {
+    const calls = [];
+    const service = new InventoryService({
+        create(item, ids) { calls.push(ids); return item; },
+    });
+    for (const categoryIds of ['id', [null], [''], [42]]) {
+        assert.throws(() => service.create({ name: 'Board', quantity: 1, categoryIds }));
+    }
+    assert.equal(calls.length, 0);
+    await service.create({ name: 'Board', quantity: 1, categoryIds: ['a', 'b', 'a'] });
+    await service.create({ name: 'Board', quantity: 1 });
+    assert.deepEqual(calls, [['a', 'b'], []]);
+});
+
+test('repository connects categories and translates missing category errors', async () => {
+    let data;
+    const repository = new PrismaInventoryRepository({ inventoryItem: {
+        async create(query) { data = query.data; return data; },
+    } });
+    await repository.create(new InventoryItem('Board', 1), ['a', 'b']);
+    assert.deepEqual(data.categories.connect, [{ id: 'a' }, { id: 'b' }]);
+
+    const failing = new PrismaInventoryRepository({ inventoryItem: {
+        async create() { throw Object.assign(new Error('Missing'), { code: 'P2025' }); },
+    } });
+    await assert.rejects(failing.create(new InventoryItem('Board', 1), ['gone']),
+        (error) => error.status === 400 && error.message.includes('category no longer exists'));
 });

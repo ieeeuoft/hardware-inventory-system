@@ -13,6 +13,12 @@ function createApp(service) {
         response.send('Hello World!');
     });
 
+    //getting all categories
+    app.get('/api/categories', async (request, response) => {
+        const categories = await service.listCategories();
+        response.json(categories);
+    });
+
     app.get('/api/items', async (request, response) => {
         const items = await service.list();
 
